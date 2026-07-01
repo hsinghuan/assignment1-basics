@@ -1,0 +1,47 @@
+Problem (unicode1):
+(a) What Unicode character does chr(0) return?
+It returns '\x00', the null character.
+
+(b) How does this character’s string representation (__repr__()) differ from its printed
+representation?
+Its string representation shows '\x00', while its printed representation shows nothing.
+
+(c) What happens when this character occurs in text? It may be helpful to play around with the
+following in your Python interpreter and see if it matches your expectations:
+It appear invisible when printed, but we can still see '\x00' in the string.
+
+Problem (unicode2):
+(a) What are some reasons to prefer training our tokenizer on UTF-8 encoded bytes, rather than
+UTF-16 or UTF-32? It may be helpful to compare the output of these encodings for various
+input strings.
+UTF-8 encoded bytes are shorter than those of UTF-16 and UTF-32.
+(b) Consider the following (incorrect) function, which is intended to decode a UTF-8 byte string
+into a Unicode string. Why is this function incorrect? Provide an example of an input byte
+string that yields incorrect results.
+The function tries to decode the bytes one by one. However, some unicode characters have multiple bytes per character and has to be decoded together, e.g. "こんにちは".
+(c) Give a two-byte sequence that does not decode to any Unicode character(s).
+\xe3\x81
+
+
+Problem (train_bpe_tinystories):
+(a) How much time and memory did training take? What is the longest token in the vocabulary? Does it make sense?
+Time: 1.62 minutes
+Memory: 1.72 GB
+Longest token: b' accomplishment', length = 15 bytes
+
+(b) What part of the tokenizer training process takes the most time?
+Pretokenization (62%)
+
+
+Problem (tokenizer_experiments):
+(a) Sample 10 documents from TinyStories and OpenWebText. Using your previously-trained TinyStories and OpenWebText tokenizers (10K and 32K vocabulary size, respectively), encode these sampled documents into integer IDs. What is each tokenizer’s compression ratio (bytes/token)?
+Compression ratio of using tinystories tokenizer to encode tinystories: 4.06
+
+(b) What happens if you tokenize your OpenWebText sample with the TinyStories tokenizer?
+Compression ratio of using tinystories tokenizer to encode OpenWebText: 3.165
+The compression ratio is lower, meaning that the tokenizer is less efficient.
+
+(c) Estimate the throughput of your tokenizer (e.g., in bytes/second). How long would it take to tokenize the Pile dataset (825GB of text)?
+The tokenizer throughput is about 901602.506 bytes/second. It'll take about 15 minutes to tokenize the Pile dataset.
+
+(d) 
