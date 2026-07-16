@@ -55,7 +55,7 @@ def run_embedding(
     """
     from cs336_basics.model.module import Embedding
     embedding = Embedding(vocab_size, d_model)
-    embedding.E.data = weights
+    embedding.weight.data = weights
     outputs = embedding(token_ids)
     return outputs
 
@@ -155,10 +155,10 @@ def run_multihead_self_attention(
     """
     from cs336_basics.model.module import CausalMultiheadAttention
     mha = CausalMultiheadAttention(d_model=d_model, num_heads=num_heads)
-    mha.q_proj_weight.weight.data = q_proj_weight
-    mha.k_proj_weight.weight.data = k_proj_weight
-    mha.v_proj_weight.weight.data = v_proj_weight
-    mha.o_proj_weight.weight.data = o_proj_weight
+    mha.q_proj.weight.data = q_proj_weight
+    mha.k_proj.weight.data = k_proj_weight
+    mha.v_proj.weight.data = v_proj_weight
+    mha.output_proj.weight.data = o_proj_weight
     return mha(in_features)
 
 
@@ -204,10 +204,10 @@ def run_multihead_self_attention_with_rope(
     d_k = d_model // num_heads
     rope = RoPE(theta=theta, d_k=d_k, max_seq_len=max_seq_len)
     mha = CausalMultiheadAttention(d_model=d_model, num_heads=num_heads, rope=rope)
-    mha.q_proj_weight.weight.data = q_proj_weight
-    mha.k_proj_weight.weight.data = k_proj_weight
-    mha.v_proj_weight.weight.data = v_proj_weight
-    mha.o_proj_weight.weight.data = o_proj_weight
+    mha.q_proj.weight.data = q_proj_weight
+    mha.k_proj.weight.data = k_proj_weight
+    mha.v_proj.weight.data = v_proj_weight
+    mha.output_proj.weight.data = o_proj_weight
     return mha(in_features, token_positions)
 
 
@@ -308,8 +308,16 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.model.module import TransformerBlock, RoPE
+    assert d_model % num_heads == 0
+    d_k = d_model // num_heads
+    rope = RoPE(theta=theta, d_k=d_k, max_seq_len=max_seq_len)
+    transformer_block = TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, rope=rope)
+    transformer_block.load_state_dict(weights)
+    output = transformer_block(in_features)
 
+    return output
+    
 
 def run_transformer_lm(
     vocab_size: int,
@@ -390,7 +398,17 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.model.language_model import TransformerLanguageModel
+    lm = TransformerLanguageModel(d_model=d_model,
+                                  num_heads=num_heads,
+                                  d_ff=d_ff,
+                                  vocab_size=vocab_size,
+                                  context_length=context_length,
+                                  num_layers=num_layers,
+                                  rope_theta=rope_theta,
+                                  )
+    lm.load_state_dict(weights)
+    return lm(in_indices)
 
 
 def run_rmsnorm(
@@ -416,7 +434,7 @@ def run_rmsnorm(
     from cs336_basics.model.module import RMSNorm
 
     rmsnorm = RMSNorm(d_model=d_model, eps=eps)
-    rmsnorm.g.data = weights
+    rmsnorm.weight.data = weights
     output = rmsnorm(in_features)
     return output
 

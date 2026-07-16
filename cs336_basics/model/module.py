@@ -28,13 +28,11 @@ class Embedding(nn.Module):
 
         E = torch.empty(num_embeddings, embedding_dim, device=device, dtype=dtype)
         nn.init.trunc_normal_(E, mean=0, std=1, a=-3, b=3)
-        self.E = nn.Parameter(E)
-        self.num_embeddings = num_embeddings
-        self.embedding_dim = embedding_dim
+        self.weight = nn.Parameter(E)
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
         assert token_ids.dtype == torch.long
-        output = self.E[token_ids]
+        output = self.weight[token_ids]
         return output
     
 
@@ -43,14 +41,14 @@ class RMSNorm(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.eps = eps
-        g = torch.ones(d_model, device=device, dtype=dtype)
-        self.g = nn.Parameter(g)
+        weight = torch.ones(d_model, device=device, dtype=dtype)
+        self.weight = nn.Parameter(weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         in_dtype = x.dtype
         x = x.to(torch.float32)
-        rms = torch.sqrt(reduce(torch.square(x), "... d -> ... 1", "mean") + self.eps)
-        output = einsum(x, self.g, "... d, d -> ... d") / rms
+        rms = torch.sqrt(reduce(torch.square(x), "... d -> ... 1", "mean") + self.eps) # FLOPS: batch size x seq len x (d_model + d_model - 1 + 1 + 1 + 1), negligible
+        output = einsum(x, self.weight, "... d, d -> ... d") / rms # FLOPs: batch size x seq len x (d_model + d_model) -> element-wise, negligible
         return output.to(in_dtype)
 
 def silu(x: torch.Tensor):
@@ -65,6 +63,9 @@ class SwiGLU(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.w2(silu(self.w1(x)) * self.w3(x))
+        # FLOPs: w1 + silu + w3 + * + w2
+        #       = 2 x seq_len x d_model x d_ff + 4 x seq_len x d_ff + 2 x seq_len x d_model x d_ff + seq_len x d_ff + 2 x seq_len x d_model x d_ff
+        #       = 6 x seq_len x d_model x d_ff + 5 x seq_len x d_ff
 
 
 class RoPE(nn.Module):
@@ -100,8 +101,8 @@ class RoPE(nn.Module):
         cos_table_lookup = self.cos_table[token_positions] # indexing first axis of cos_table with token_positions -> (..., seq_len, num_rotate)
         sin_table_lookup = self.sin_table[token_positions] # indexing first axis of sin_table with token_positions -> (..., seq_len, num_rotate)
 
-        x0 = cos_table_lookup * x[..., 0] - sin_table_lookup * x[..., 1] # Shape: ... seq_len num_rotate
-        x1 = sin_table_lookup * x[..., 0] + cos_table_lookup * x[..., 1] # Shape: ... seq_len num_rotate
+        x0 = cos_table_lookup * x[..., 0] - sin_table_lookup * x[..., 1] # Shape: ... seq_len num_rotate, FLOPs: 3 x seq_len x num_rotate = 3 x seq_len x d_k / 2 (per head)
+        x1 = sin_table_lookup * x[..., 0] + cos_table_lookup * x[..., 1] # Shape: ... seq_len num_rotate, FLOPs: 3 x seq_len x num_rotate = 3 x seq_len x d_k / 2 (per head)
         output = rearrange([x0, x1], "rotate_dim ... seq_len num_rotate -> ... seq_len (num_rotate rotate_dim)") # Stack and rearrange back to shape: ... seq_len d_k, also row major
         
         return output
@@ -122,11 +123,11 @@ def scaled_dot_product_attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tens
 
     d_k = Q.size(-1)
 
-    presoftmax = einsum(Q, K, "... n_queries d_k, ... n_keys d_k -> ... n_queries n_keys") / math.sqrt(d_k)
+    presoftmax = einsum(Q, K, "... n_queries d_k, ... n_keys d_k -> ... n_queries n_keys") / math.sqrt(d_k) # FLOPs: 2 x n_queries x n_keys x d_k
     if mask is not None:
         presoftmax = presoftmax.masked_fill(~mask, -torch.inf)
-    postsoftmax = softmax(presoftmax, i=-1)
-    output = einsum(postsoftmax, V, "... n_queries n_keys, ... n_keys d_v -> ... n_queries d_v")
+    postsoftmax = softmax(presoftmax, i=-1) # FLOPs: ~ 5 x n_keys x n_queries
+    output = einsum(postsoftmax, V, "... n_queries n_keys, ... n_keys d_v -> ... n_queries d_v") # FLOPs: 2 x n_queries x n_keys x d_v
     return output
 
 
@@ -136,31 +137,46 @@ class CausalMultiheadAttention(nn.Module):
         assert d_model % num_heads == 0
         d_k = d_model // num_heads
         self.d_k = d_k
-        self.q_proj_weight = Linear(d_model, d_model, device=device, dtype=dtype)
-        self.k_proj_weight = Linear(d_model, d_model, device=device, dtype=dtype)
-        self.v_proj_weight = Linear(d_model, d_model, device=device, dtype=dtype)
-        self.o_proj_weight = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.q_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.k_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.v_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.output_proj = Linear(d_model, d_model, device=device, dtype=dtype)
         self.rope = rope
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor = None):
         # x shape: ..., seq_len, d_model
         x_device = x.device
         seq_len = x.size(-2)
-        Q = rearrange(self.q_proj_weight(x), "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", d_k=self.d_k)
-        K = rearrange(self.k_proj_weight(x), "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", d_k=self.d_k)
-        V = rearrange(self.v_proj_weight(x), "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", d_k=self.d_k)
+        Q = rearrange(self.q_proj(x), "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", d_k=self.d_k) # FLOPS: 2 x seq_len x d_model ** 2
+        K = rearrange(self.k_proj(x), "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", d_k=self.d_k) # FLOPS: 2 x seq_len x d_model ** 2
+        V = rearrange(self.v_proj(x), "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", d_k=self.d_k) # FLOPS: 2 x seq_len x d_model ** 2
         
         if self.rope is not None:
             if token_positions is None:
                 token_positions = torch.arange(seq_len, device=x_device)
-            Q = self.rope(Q, token_positions)
-            K = self.rope(K, token_positions)
+            Q = self.rope(Q, token_positions) # FLOPS: 3 x seq_len x d_k x num_heads = 3 x seq_len x d_model -> negligible
+            K = self.rope(K, token_positions) # FLOPS: 3 x seq_len x d_k x num_heads = 3 x seq_len x d_model -> negligible
 
         mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x_device, dtype=torch.bool), diagonal=1)
-        output = scaled_dot_product_attention(Q, K, V, mask=mask)
+        output = scaled_dot_product_attention(Q, K, V, mask=mask) # FLOPS: 4 x d_k x seq_len ** 2 x num_heads + 5 x seq_len ** 2 x num_heads = 4 x seq_len ** 2 x d_model + 5 x seq_len ** 2 x num_heads
         output = rearrange(output, "... num_heads seq_len d_k -> ... seq_len (num_heads d_k)")
-        output = self.o_proj_weight(output)
+        output = self.output_proj(output) # FLOPS: 2 x seq_len x d_model ** 2
         return output
+
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, rope: RoPE = None, device=None, dtype=None):
+        super().__init__()
+        self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.attn = CausalMultiheadAttention(d_model, num_heads, rope, device=device, dtype=dtype)
+        self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.ffn = SwiGLU(d_model, d_ff, device=device, dtype=dtype)
+    
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor=None):
+        x = x + self.attn(self.ln1(x), token_positions)
+        x = x + self.ffn(self.ln2(x))
+
+        return x
+    
 
 
 # if __name__ == "__main__":
