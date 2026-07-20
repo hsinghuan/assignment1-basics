@@ -108,3 +108,109 @@ The FFN part of Transformer takes up more FLOPs as model size scales. LM head co
 = 1.3357773e14
 
 The FLOPs count for Attn 74x'ed while the FLOPs count for FFN increases 16x'ed from the context length increase. This is because attention computation scales quadratically w.r.t. sequence length. Also, now Attn contributes more to the FLOPs count than FFN whereas in the context length = 1,024 case, Attn contributes less than FFN.
+
+
+
+Problem (adamw_accounting)
+Let us compute how much memory and compute running AdamW requires. Assume we are using float32 for every tensor.
+
+(a) How much peak memory does running AdamW require? Decompose your answer based on the memory usage of the parameters, activations, gradients, and optimizer state.
+Express your answer in terms of the batch_size and the model hyperparameters (vocab_size, context_length, num_layers, d_model, num_heads). Assume d_ff = 8 / 3 × d_{model}.
+
+Parameters memory usage
+1. # Embedding parameters x bytes per parameter= vocab_size x d_model x 4 (bytes)
+2. Single transformer block:
+    (a) RMSNorm gain x 2: d_model x 2 x 4 = 8 d_model (bytes)
+    (b) Self-attention projection matrices (Q, K, V, O): 4 x d_model x d_model x 4 = 16 d_model**2 (bytes)
+    (c) Feedforward network (2 layers + a gating network): 3 x d_model x d_ff x 4 = 12 d_model d_ff (bytes) = 32 d_model**2 (bytes)
+3. # Language model head parameters:
+    (a) RMSNorm gain: d_model x 4 = 4 d_model (bytes)
+    (b) LM head: d_model x vocab_size x 4 (bytes)
+
+In total, vocab_size x d_model x 4 + (8 d_model + 48 d_model**2) x num_layers + 4 d_model + d_model x vocab_size x 4 (bytes).
+
+Activations memory usage
+1. Transformer block
+    (a) RMSNorm(s): batch_size x context_length x d_model x 2 (RMSNorms per block) x 4 (bytes) = 8 x batch_size x context_length x d_model (bytes)
+    (b) Multi-head self-attention sublayer:
+        (i) QKV projections: batch_size x context_length x d_model x 3 x 4 (bytes) = 12 x batch_size x context_length x d_model (bytes)
+        (ii) QK^\top matrix multiply: batch_size x num_heads x context_length ** 2 x 4 (bytes) = 4 x batch_size x num_heads x context_length** 2 (bytes)
+        (iii) softmax: batch_size x num_heads x context_length**2 x 4 (bytes)
+        (iv) weighted sum of values: batch_size x num_heads x context_length x d_model / num_heads x 4 (bytes) = batch_size x context_length x d_model x 4 (bytes)
+        (v) output projection: batch_size x context_length x d_model x 4 (bytes)
+    (c) Position-wise feed-forward (SwiGLU):
+        (i) W_1: batch_size x context_length x d_ff x 4 (bytes)
+        (ii) W_2: batch_size x context_length x d_model x 4 (bytes)
+        (iii) silu on the gate branch: batch_size x context_length x d_ff x 4 (bytes)
+        (iv) element-wise product: batch_size x context_length x d_ff x 4 (bytes)
+        (v) W_3: batch_size x context_length x d_ff x 4 (bytes)
+2. Final RMSNorm: batch_size x context_length x d_model x 4 (bytes)
+3. Output embedding: batch_size x context_length x vocab_size x 4 (bytes)
+4. Cross-entropy on logits: batch_size x context_length x vocab_size x 4 (bytes)
+
+In total, (8 x batch_size x context_length x d_model
+        + 12 x batch_size x context_length x d_model
+        + 4 x batch_size x num_heads x context_length**2
+        + batch_size x num_heads x context_length**2 x 4
+        + batch_size x context_length x d_model x 4
+        + batch_size x context_length x d_model x 4
+        + batch_size x context_length x d_ff x 4
+        + batch_size x context_length x d_model x 4
+        + batch_size x context_length x d_ff x 4
+        + batch_size x context_length x d_ff x 4
+        + batch_size x context_length x d_ff x 4) x num_layers
+        + batch_size x context_length x d_model x 4
+        + batch_size x context_length x vocab_size x 4
+        + batch_size x context_length x vocab_size x 4
+    = (32 x batch_size x context_length x d_model + 8 x batch_size x num_heads x context_length**2 + 16 x batch_size x context_length x d_ff) x num_layers + 4 x batch_size x context_length x d_model + 8 x batch_size x context_length x vocab_size
+
+Gradients
+Should be the same as parameters memory usage since all parameters are trainable.
+
+Optimizer state
+Aside from gradients, the 1st and 2nd moment vectors also consumes memory. Each consumes the same amount of memory as the parameters. There are also other constant hyper-parameters such as learning rate, betas, etc., but should be negligible.
+
+Therefore, the total memory consumption is:
+    Parameters + Activations + Gradients + Optimizer State
+= vocab_size x d_model x 4 + (8 d_model + 48 d_model**2) x num_layers + 4 d_model + d_model x vocab_size x 4
+ + (32 x batch_size x context_length x d_model + 8 x batch_size x num_heads x context_length**2 + 16 x batch_size x context_length x d_ff) x num_layers + 4 x batch_size x context_length x d_model + 8 x batch_size x context_length x vocab_size
+ + vocab_size x d_model x 4 + (8 d_model + 48 d_model**2) x num_layers + 4 d_model + d_model x vocab_size x 4
+ + (vocab_size x d_model x 4 + (8 d_model + 48 d_model**2) x num_layers + 4 d_model + d_model x vocab_size x 4) x 2
+
+= (vocab_size x d_model x 4 + (8 d_model + 48 d_model**2) x num_layers + 4 d_model + d_model x vocab_size x 4) x 4
+  + (32 x batch_size x context_length x d_model + 8 x batch_size x num_heads x context_length**2 + 16 x batch_size x context_length x d_ff) x num_layers + 4 x batch_size x context_length x d_model + 8 x batch_size x context_length x vocab_size
+
+= num_layers x (192 d_model**2 + 32 d_model + (224 / 3) x batch_size x context_length x d_model + 8 x batch_size x num_heads x context_length**2)
++ 32 x vocab_size x d_model
++ 16 x d_model
++ 4 x batch_size x context_length x d_model
++ 8 x batch_size x context_length x vocab_size
+
+
+(b) Instantiate your answer for a GPT-2 XL-shaped model to get an expression that only depends on the batch_size. What is the maximum batch size you can use and still fit within 80GB memory?
+
+Substituting GPT-2 XL hyper-parameters, we get: 26,168,601,600 + 16,356,614,144 x batch_size
+
+To fit within 80 GB, we want: 26,168,601,600 + 16,356,614,144 x batch_size <= 80 x 2**30 = 85,899,345,920
+batch_size <= (85,899,345,920 - 26,168,601,600) / 16,356,614,144 = 3.65
+The maximum batch size to choose is 3.
+
+
+(c) How many FLOPs does running one step of AdamW take?
+
+p.data = p.data - lr * weight_decay * p.data # 2 FLOPs per param
+state["m"] = betas[0] * state["m"] + (1 - betas[0]) * p.grad.data # 3 FLOPs per param
+state["v"] = betas[1] * state["v"] + (1 - betas[1]) * p.grad.data**2 # 4 FLOPs per param
+p.data -= lr_t * state["m"] / (torch.sqrt(state["v"]) + eps) # 5 FLOPs per param
+
+Therefore, it takes (2 + 3 + 4 + 5) x # parameters FLOPs per single optimizer step
+
+
+(d) Model FLOPs utilization (MFU) is defined as the ratio of observed throughput (tokens per second) relative to the hardware’s theoretical peak FLOP throughput [A. Chowdhery et al., 2022].
+An NVIDIA H100 GPU has a theoretical peak of 495 teraFLOP/s for “float32” (actually TensorFloat-32, which in reality is “bfloat19”) operations.
+Assuming you are able to get 50% MFU, how long would it take to train a GPT-2 XL for 400K steps and a batch size of 1024 on a single H100?
+Following J. Kaplan et al. [25] and J. Hoffmann et al. [26], assume that the backward pass has twice the FLOPs of the forward pass.
+
+FLOPs per single training step ~= 3,516,769,894,400 x 3 x 1,024 (batch size) = 1.08035171e16 FLOPs
+FLOPs needed for 400K steps = 1.08035171e16 * 400,000 = 4.32140684e21 FLOPs
+Time needed = 4.32140684e21 / (495 * 10**12 * 0.5) = 17460229.7 seconds = 4,850.0638 hours ~= 202 days
