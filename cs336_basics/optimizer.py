@@ -53,6 +53,7 @@ class AdamW(torch.optim.Optimizer):
 
 
 def learning_rate_schedule(it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters):
+    assert warmup_iters <= cosine_cycle_iters
     if it < warmup_iters:
         learning_rate = it / warmup_iters * max_learning_rate
     elif warmup_iters <= it <= cosine_cycle_iters:
