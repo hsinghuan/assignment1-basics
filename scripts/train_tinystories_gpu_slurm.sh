@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH -p gh -N 1 -n 1 -t 2:00:00
-#SBATCH --output=/dev/null
-#SBATCH --error=/dev/null
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 
 set -e
 
@@ -11,6 +11,7 @@ VAL_DATA_PATH="$2"
 MAX_LR="${MAX_LR:-1e-3}"
 MIN_LR="${MIN_LR:-1e-4}"
 BATCH_SIZE="${BATCH_SIZE:-128}"
+RUN_NAME="tinystories_bs${TRAIN_BATCH_SIZE}_lr${MAX_LR}"
 
 uv run python -m scripts.train \
     --train_data_path "$TRAIN_DATA_PATH" \
@@ -35,5 +36,5 @@ uv run python -m scripts.train \
     --warmup_steps 500 \
     --cosine_cycle_steps 10000 \
     --max_grad_norm 1.0 \
-    --run_name mps \
+    --run_name "$RUN_NAME" \
     --use_wandb
