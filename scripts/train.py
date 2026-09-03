@@ -5,6 +5,7 @@ import torch
 import wandb
 from pathlib import Path
 import time
+from tqdm import tqdm
 from cs336_basics.model.language_model import TransformerLanguageModel
 from cs336_basics.optimizer import AdamW, learning_rate_schedule, gradient_clipping
 from cs336_basics.data import get_batch
@@ -28,7 +29,7 @@ def validation(model: torch.nn.Module, val_data: np.ndarray, eval_steps: int, ev
 if __name__ == "__main__":
     # specify args: hyper-parameters, data path, checkpoint path, wandb logging
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run_name", type=str)
+    parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--train_data_path", type=str)
     parser.add_argument("--val_data_path", type=str)
     parser.add_argument("--resume_from", type=str, default=None, help="Checkpoint path to resume training")
@@ -123,7 +124,9 @@ if __name__ == "__main__":
 
     model.train()
     # Train model
-    for step in range(start_step, args.train_steps + 1):
+    pbar = tqdm(range(start_step, args.train_steps + 1),
+                total=args.train_steps, initial=start_step - 1)
+    for step in pbar:
         x, y = get_batch(train_data, args.train_batch_size, args.context_length, device=args.device)
 
         # Forward
@@ -141,22 +144,25 @@ if __name__ == "__main__":
 
         # Log train metrics
         if step % args.steps_per_log == 0:
-            print(f"train/step: {step} train/loss: {train_loss.item():.3f} train/lr: {lr:.3f}")
+            train_loss_value = train_loss.item()
+            print(f"train/step: {step} train/loss: {train_loss_value:.3f} train/lr: {lr:.3f}")
             if args.use_wandb:
-                run.log({"train/loss": train_loss.item(),
+                run.log({"train/loss": train_loss_value,
                         "train/lr": lr,
-                        "train/step": step})
+                        "train/step": step}, step=step)
+            pbar.set_postfix(loss=train_loss_value, lr=lr)
 
         # Validation
         if step % args.steps_per_eval == 0:
             val_loss = validation(model, val_data, args.eval_steps, args.eval_batch_size, args.context_length, args.device)
             # Log val loss
-            print(f"val/loss: {val_loss.item():.3f}")
+            val_loss_value = val_loss.item()
+            print(f"val/loss: {val_loss_value:.3f}")
             if args.use_wandb:
-                run.log({"val/loss": val_loss.item()})
+                run.log({"val/loss": val_loss_value}, step=step)
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss.item()
+            if val_loss_value < best_val_loss:
+                best_val_loss = val_loss_value
                 save_checkpoint(model, optimizer, step, Path(output_dir) / "best.pt", historical_best_val_loss=best_val_loss)
 
 
