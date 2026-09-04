@@ -11,7 +11,7 @@ VAL_DATA_PATH="$2"
 MAX_LR="${MAX_LR:-1e-3}"
 MIN_LR="${MIN_LR:-1e-4}"
 BATCH_SIZE="${BATCH_SIZE:-128}"
-RUN_NAME="tinystories_bs${TRAIN_BATCH_SIZE}_lr${MAX_LR}"
+RUN_NAME="tinystories_bs${BATCH_SIZE}_lr${MAX_LR}"
 
 uv run python -m scripts.train \
     --train_data_path "$TRAIN_DATA_PATH" \

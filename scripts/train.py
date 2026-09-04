@@ -67,14 +67,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Initialize wandb project
-    if args.use_wandb:
-        run = wandb.init(
-            project="lm_from_scratch_hw1",
-            config=vars(args)
-        )
-
-    
 
     # Memory-efficient loading of large training and validation datasets with np.memmap
     train_data = np.memmap(args.train_data_path, dtype=np.uint16, mode="r")
@@ -109,17 +101,29 @@ if __name__ == "__main__":
         else:
             best_val_loss = historical_best_val_loss
         output_dir = Path(args.resume_from).parent
+        run_name = output_dir.name
     else:
         if args.run_name is None:
-            run_name = str(time.time())
+            run_name = str(int(time.time()))
         else:
-            run_name = args.run_name + "_" + str(time.time())
+            run_name = args.run_name + "_" + str(int(time.time()))
         output_dir = Path(args.output_root) / run_name
         if not os.path.exists(args.output_root):
             os.makedirs(args.output_root)
         os.makedirs(output_dir)
         start_step = 1
         best_val_loss = np.inf
+
+
+    # Initialize wandb project
+    if args.use_wandb:
+        run = wandb.init(
+            project="lm_from_scratch_hw1",
+            id=run_name,
+            name=run_name,
+            resume="allow",
+            config=vars(args)
+        )
 
 
     model.train()
