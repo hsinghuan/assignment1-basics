@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -p gh -N 1 -n 1 -t 2:00:00
+#SBATCH -p gh -N 1 -n 1 -t 4:00:00
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
