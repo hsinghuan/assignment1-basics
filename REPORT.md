@@ -1,61 +1,77 @@
-Problem (unicode1):
-(a) What Unicode character does chr(0) return?
-It returns '\x00', the null character.
+# CS336 Assignment 1 Report
 
-(b) How does this character’s string representation (__repr__()) differ from its printed
-representation?
-Its string representation shows '\x00', while its printed representation shows nothing.
+## Problem (unicode1)
 
-(c) What happens when this character occurs in text? It may be helpful to play around with the
-following in your Python interpreter and see if it matches your expectations:
-It appear invisible when printed, but we can still see '\x00' in the string.
+**(a) What Unicode character does `chr(0)` return?**
 
-Problem (unicode2):
-(a) What are some reasons to prefer training our tokenizer on UTF-8 encoded bytes, rather than
-UTF-16 or UTF-32? It may be helpful to compare the output of these encodings for various
-input strings.
+It returns `'\x00'`, the null character.
+
+**(b) How does this character's string representation (`__repr__()`) differ from its printed representation?**
+
+Its string representation shows `'\x00'`, while its printed representation shows nothing.
+
+**(c) What happens when this character occurs in text? It may be helpful to play around with the following in your Python interpreter and see if it matches your expectations:**
+
+It appear invisible when printed, but we can still see `'\x00'` in the string.
+
+## Problem (unicode2)
+
+**(a) What are some reasons to prefer training our tokenizer on UTF-8 encoded bytes, rather than UTF-16 or UTF-32? It may be helpful to compare the output of these encodings for various input strings.**
+
 UTF-8 encoded bytes are shorter than those of UTF-16 and UTF-32.
-(b) Consider the following (incorrect) function, which is intended to decode a UTF-8 byte string
-into a Unicode string. Why is this function incorrect? Provide an example of an input byte
-string that yields incorrect results.
+
+**(b) Consider the following (incorrect) function, which is intended to decode a UTF-8 byte string into a Unicode string. Why is this function incorrect? Provide an example of an input byte string that yields incorrect results.**
+
 The function tries to decode the bytes one by one. However, some unicode characters have multiple bytes per character and has to be decoded together, e.g. "こんにちは".
-(c) Give a two-byte sequence that does not decode to any Unicode character(s).
-\xe3\x81
 
+**(c) Give a two-byte sequence that does not decode to any Unicode character(s).**
 
-Problem (train_bpe_tinystories):
-(a) How much time and memory did training take? What is the longest token in the vocabulary? Does it make sense?
-Time: 1.62 minutes
-Memory: 1.72 GB
-Longest token: b' accomplishment', length = 15 bytes
+`\xe3\x81`
 
-(b) What part of the tokenizer training process takes the most time?
+## Problem (train_bpe_tinystories)
+
+**(a) How much time and memory did training take? What is the longest token in the vocabulary? Does it make sense?**
+
+- Time: 1.62 minutes
+- Memory: 1.72 GB
+- Longest token: `b' accomplishment'`, length = 15 bytes
+
+**(b) What part of the tokenizer training process takes the most time?**
+
 Pretokenization (62%)
 
+## Problem (tokenizer_experiments)
 
-Problem (tokenizer_experiments):
-(a) Sample 10 documents from TinyStories and OpenWebText. Using your previously-trained TinyStories and OpenWebText tokenizers (10K and 32K vocabulary size, respectively), encode these sampled documents into integer IDs. What is each tokenizer’s compression ratio (bytes/token)?
+**(a) Sample 10 documents from TinyStories and OpenWebText. Using your previously-trained TinyStories and OpenWebText tokenizers (10K and 32K vocabulary size, respectively), encode these sampled documents into integer IDs. What is each tokenizer's compression ratio (bytes/token)?**
+
 Compression ratio of using tinystories tokenizer to encode tinystories: 4.06
 
-(b) What happens if you tokenize your OpenWebText sample with the TinyStories tokenizer?
+**(b) What happens if you tokenize your OpenWebText sample with the TinyStories tokenizer?**
+
 Compression ratio of using tinystories tokenizer to encode OpenWebText: 3.165
+
 The compression ratio is lower, meaning that the tokenizer is less efficient.
 
-(c) Estimate the throughput of your tokenizer (e.g., in bytes/second). How long would it take to tokenize the Pile dataset (825GB of text)?
+**(c) Estimate the throughput of your tokenizer (e.g., in bytes/second). How long would it take to tokenize the Pile dataset (825GB of text)?**
+
 The tokenizer throughput is about 901602.506 bytes/second. It'll take about 15 minutes to tokenize the Pile dataset.
 
+## Problem (transformer_accounting)
 
-Problem (transformer_accounting):
-(a) Consider a GPT-2 XL-sized model using our assignment architecture, which has the following configuration:
-vocab_size: 50,257
-context_length: 1,024
-num_layers: 48
-d_model: 1,600
-num_heads: 25
-d_ff: 4,288 (the nearest multiple of 64 to 8 / 3 × 1, 600)
-Suppose we constructed our model using this configuration. How many trainable parameters would our model have? Assuming each parameter is represented using single-precision floating point, how much memory is required to just load this model?
+**(a) Consider a GPT-2 XL-sized model using our assignment architecture, which has the following configuration:**
+
+- vocab_size: 50,257
+- context_length: 1,024
+- num_layers: 48
+- d_model: 1,600
+- num_heads: 25
+- d_ff: 4,288 (the nearest multiple of 64 to 8 / 3 × 1, 600)
+
+**Suppose we constructed our model using this configuration. How many trainable parameters would our model have? Assuming each parameter is represented using single-precision floating point, how much memory is required to just load this model?**
 
 Parameters (Embedding + Transformer layers + language model head)
+
+```
 1. # Embedding parameters = vocab_size x d_model = 50,257 x 1600 = 80,411,200
 2. # parameters / transformer layer:
     (a) RMSNorm gain x 2: d_model x 2 = 3,200
@@ -67,9 +83,11 @@ Parameters (Embedding + Transformer layers + language model head)
 
 Total # parameters = 80,411,200 + (3,200 + 10,240,000 + 20,582,400) x 48 + 1,600 + 80,411,200 = 1,640,452,800
 Single-precision floating point (4 bytes / parameter): 1,640,452,800 x 4 = 6,561,811,200 bytes = 6.11 GB
+```
 
+**(b) Identify the matrix multiplies required to complete a forward pass of our GPT-2 XL-shaped model. How many FLOPs do these matrix multiplies require in total? Assume that our input sequence has context_length tokens.**
 
-(b) Identify the matrix multiplies required to complete a forward pass of our GPT-2 XL-shaped model. How many FLOPs do these matrix multiplies require in total? Assume that our input sequence has context_length tokens.
+```
 1. Embedding: 0 FLOPs
 2. 1 Transformer layer ( FFN(RMSNorm(Attn(RMSNorm(x)) + x)) + x )
     (a) RMSNorm: context_length x (4 d_model + 2) = 1,024 x (4 x 1,600 + 2) = 6,555,648 (not matmul)
@@ -89,35 +107,42 @@ Single-precision floating point (4 bytes / parameter): 1,640,452,800 x 4 = 6,561
 4. LM Head: 2 x context_length x d_model x vocab_size = 2 x 1,024 x 1,600 x 50,257 = 164,682,137,600
 
 Total FLOPs from the matmuls: (27,682,406,400 + 42,152,755,200) x 48 + 164,682,137,600 = 3,516,769,894,400
+```
 
+**(c) Based on your analysis above, which parts of the model require the most FLOPs?**
 
-(c) Based on your analysis above, which parts of the model require the most FLOPs?
 More FLOPS come from the transformer layers compared to the final LM head. Within each transformer layer, the FFN contributes more than the attention block. Therefore, the FFN of the transformer requires the most FLOPs.
 
-(d) Repeat your analysis with GPT-2 small (12 layers, 768 d_model, 12 heads), GPT-2 medium (24 layers, 1024 d_model, 16 heads), and GPT-2 large (36 layers, 1280 d_model, 20 heads). As the model size increases, which parts of the Transformer LM take up proportionally more or less of the total FLOPs?
+**(d) Repeat your analysis with GPT-2 small (12 layers, 768 d_model, 12 heads), GPT-2 medium (24 layers, 1024 d_model, 16 heads), and GPT-2 large (36 layers, 1280 d_model, 20 heads). As the model size increases, which parts of the Transformer LM take up proportionally more or less of the total FLOPs?**
+
+```
 Formula: (Attn + FFN) x num_layers + LM Head = (8 x context_length x d_model ** 2 + 4 x context_length ** 2 x d_model + 6 x context_length x d_model x d_ff) x num_layers + 2 x context_length x d_model x vocab_size
 GPT-2 small: (8 x 1,024 x 768**2 + 4 x 1,024**2 x 768 + 6 x 1,024 x 768 x 2048) x 12 + 2 x 1,024 x 768 x 50,257 = (8,053,063,680 + 9,663,676,416) x 12 + 79,047,426,048 = 212,600,881,152 + 79,047,426,048 = 291,648,307,200
 GPT-2 medium: (8 x 1,024 x 1024**2 + 4 x 1,024**2 x 1024 + 6 x 1,024 x 1,024 x 2,752) x 24 + 2 x 1,024 x 1,024 x 50,257 = (12,884,901,888 + 17,314,086,912) x 24 + 105,396,568,064 = 724,775,731,200 + 105,396,568,064 = 830,172,299,264
 GPT-2 large: (8 x 1,024 x 1,280**2 + 4 x 1,024**2 x 1,280 + 6 x 1,024 x 1,280 x 3,392) x 36 + 2 x 1,024 x 1,280 x 50,257 = (18,790,481,920 + 26,675,773,440) x 36 + 131,745,710,080 = 1,636,785,192,960 + 131,745,710,080 = 1,768,530,903,040
+```
 
 The FFN part of Transformer takes up more FLOPs as model size scales. LM head contribution becomes smaller as model size scales because LM head scales linearly w.r.t. d_model while Transformer scales quadratically. Also, there are more transformer layers contributing to the FLOP count.
 
-(e) Take GPT-2 XL and increase the context length to 16,384. How does the total FLOPs for one forward pass change? How does the relative contribution of FLOPs of the model components change?
+**(e) Take GPT-2 XL and increase the context length to 16,384. How does the total FLOPs for one forward pass change? How does the relative contribution of FLOPs of the model components change?**
+
+```
 (8 x 16,384 x 1,600**2 + 4 x 16,384**2 x 1,600 + 6 x 16,384 x 1,600 x 4,288) x 48 + 2 x 16,384 x 1,600 x 50,257
 = (2,053,531,238,400 + 674,444,083,200) x 48 + 2 x 16,384 x 1,600 x 50,257
 = 1.3357773e14
+```
 
 The FLOPs count for Attn 74x'ed while the FLOPs count for FFN increases 16x'ed from the context length increase. This is because attention computation scales quadratically w.r.t. sequence length. Also, now Attn contributes more to the FLOPs count than FFN whereas in the context length = 1,024 case, Attn contributes less than FFN.
 
+## Problem (adamw_accounting)
 
-
-Problem (adamw_accounting)
 Let us compute how much memory and compute running AdamW requires. Assume we are using float32 for every tensor.
 
-(a) How much peak memory does running AdamW require? Decompose your answer based on the memory usage of the parameters, activations, gradients, and optimizer state.
-Express your answer in terms of the batch_size and the model hyperparameters (vocab_size, context_length, num_layers, d_model, num_heads). Assume d_ff = 8 / 3 × d_{model}.
+**(a) How much peak memory does running AdamW require? Decompose your answer based on the memory usage of the parameters, activations, gradients, and optimizer state. Express your answer in terms of the batch_size and the model hyperparameters (vocab_size, context_length, num_layers, d_model, num_heads). Assume d_ff = 8 / 3 × d_{model}.**
 
-Parameters memory usage
+### Parameters memory usage
+
+```
 1. # Embedding parameters x bytes per parameter= vocab_size x d_model x 4 (bytes)
 2. Single transformer block:
     (a) RMSNorm gain x 2: d_model x 2 x 4 = 8 d_model (bytes)
@@ -128,8 +153,11 @@ Parameters memory usage
     (b) LM head: d_model x vocab_size x 4 (bytes)
 
 In total, vocab_size x d_model x 4 + (8 d_model + 48 d_model**2) x num_layers + 4 d_model + d_model x vocab_size x 4 (bytes).
+```
 
-Activations memory usage
+### Activations memory usage
+
+```
 1. Transformer block
     (a) RMSNorm(s): batch_size x context_length x d_model x 2 (RMSNorms per block) x 4 (bytes) = 8 x batch_size x context_length x d_model (bytes)
     (b) Multi-head self-attention sublayer:
@@ -163,14 +191,21 @@ In total, (8 x batch_size x context_length x d_model
         + batch_size x context_length x vocab_size x 4
         + batch_size x context_length x vocab_size x 4
     = (32 x batch_size x context_length x d_model + 8 x batch_size x num_heads x context_length**2 + 16 x batch_size x context_length x d_ff) x num_layers + 4 x batch_size x context_length x d_model + 8 x batch_size x context_length x vocab_size
+```
 
-Gradients
+### Gradients
+
 Should be the same as parameters memory usage since all parameters are trainable.
 
-Optimizer state
+### Optimizer state
+
 Aside from gradients, the 1st and 2nd moment vectors also consumes memory. Each consumes the same amount of memory as the parameters. There are also other constant hyper-parameters such as learning rate, betas, etc., but should be negligible.
 
+### Total
+
 Therefore, the total memory consumption is:
+
+```
     Parameters + Activations + Gradients + Optimizer State
 = vocab_size x d_model x 4 + (8 d_model + 48 d_model**2) x num_layers + 4 d_model + d_model x vocab_size x 4
  + (32 x batch_size x context_length x d_model + 8 x batch_size x num_heads x context_length**2 + 16 x batch_size x context_length x d_ff) x num_layers + 4 x batch_size x context_length x d_model + 8 x batch_size x context_length x vocab_size
@@ -185,32 +220,82 @@ Therefore, the total memory consumption is:
 + 16 x d_model
 + 4 x batch_size x context_length x d_model
 + 8 x batch_size x context_length x vocab_size
+```
 
+**(b) Instantiate your answer for a GPT-2 XL-shaped model to get an expression that only depends on the batch_size. What is the maximum batch size you can use and still fit within 80GB memory?**
 
-(b) Instantiate your answer for a GPT-2 XL-shaped model to get an expression that only depends on the batch_size. What is the maximum batch size you can use and still fit within 80GB memory?
+Substituting GPT-2 XL hyper-parameters, we get:
 
-Substituting GPT-2 XL hyper-parameters, we get: 26,168,601,600 + 16,356,614,144 x batch_size
+```
+26,168,601,600 + 16,356,614,144 x batch_size
+```
 
-To fit within 80 GB, we want: 26,168,601,600 + 16,356,614,144 x batch_size <= 80 x 2**30 = 85,899,345,920
+To fit within 80 GB, we want:
+
+```
+26,168,601,600 + 16,356,614,144 x batch_size <= 80 x 2**30 = 85,899,345,920
 batch_size <= (85,899,345,920 - 26,168,601,600) / 16,356,614,144 = 3.65
+```
+
 The maximum batch size to choose is 3.
 
+**(c) How many FLOPs does running one step of AdamW take?**
 
-(c) How many FLOPs does running one step of AdamW take?
-
+```python
 p.data = p.data - lr * weight_decay * p.data # 2 FLOPs per param
 state["m"] = betas[0] * state["m"] + (1 - betas[0]) * p.grad.data # 3 FLOPs per param
 state["v"] = betas[1] * state["v"] + (1 - betas[1]) * p.grad.data**2 # 4 FLOPs per param
 p.data -= lr_t * state["m"] / (torch.sqrt(state["v"]) + eps) # 5 FLOPs per param
+```
 
 Therefore, it takes (2 + 3 + 4 + 5) x # parameters FLOPs per single optimizer step
 
+**(d) Model FLOPs utilization (MFU) is defined as the ratio of observed throughput (tokens per second) relative to the hardware's theoretical peak FLOP throughput [A. Chowdhery et al., 2022]. An NVIDIA H100 GPU has a theoretical peak of 495 teraFLOP/s for "float32" (actually TensorFloat-32, which in reality is "bfloat19") operations. Assuming you are able to get 50% MFU, how long would it take to train a GPT-2 XL for 400K steps and a batch size of 1024 on a single H100? Following J. Kaplan et al. [25] and J. Hoffmann et al. [26], assume that the backward pass has twice the FLOPs of the forward pass.**
 
-(d) Model FLOPs utilization (MFU) is defined as the ratio of observed throughput (tokens per second) relative to the hardware’s theoretical peak FLOP throughput [A. Chowdhery et al., 2022].
-An NVIDIA H100 GPU has a theoretical peak of 495 teraFLOP/s for “float32” (actually TensorFloat-32, which in reality is “bfloat19”) operations.
-Assuming you are able to get 50% MFU, how long would it take to train a GPT-2 XL for 400K steps and a batch size of 1024 on a single H100?
-Following J. Kaplan et al. [25] and J. Hoffmann et al. [26], assume that the backward pass has twice the FLOPs of the forward pass.
-
+```
 FLOPs per single training step ~= 3,516,769,894,400 x 3 x 1,024 (batch size) = 1.08035171e16 FLOPs
 FLOPs needed for 400K steps = 1.08035171e16 * 400,000 = 4.32140684e21 FLOPs
 Time needed = 4.32140684e21 / (495 * 10**12 * 0.5) = 17460229.7 seconds = 4,850.0638 hours ~= 202 days
+```
+
+## Problem (learning_rate)
+
+**(a) Perform a hyperparameter sweep over the learning rates and report the final losses (or note divergence if the optimizer diverges).**
+
+I first fixed the batch size at 128 and swept through the following learning rates: {5e-4, 1e-3, 2e-3, 4e-3, 8e-3, 16e-3} and ran for 10K steps.
+The validation losses at the final step are:
+
+| Learning rate | Final val loss |
+|---|---|
+| 5e-4 | 1.43475 |
+| 1e-3 | 1.36962 |
+| 2e-3 | 1.34955 |
+| 4e-3 | 1.32856 |
+| 8e-3 | 1.33067 |
+| 16e-3 | 2.33001 (diverged, val loss is very unstable) |
+
+Based on the results, lr = 4e-3 seems to be the best learning rate.
+
+**(b) Folk wisdom is that the best learning rate is "at the edge of stability." Investigate how the point at which learning rates diverge is related to your best learning rate.**
+
+The validation curves of lr = 4e-3 and 8e-3 are very close and almost overlap at the end of training. Their validation curves are better than smaller learning rates. However, once we double the learning rate again from 8e-3 to 16e-3, the validation loss completely diverged.
+
+## Problem (batch_size_experiment)
+
+**Vary your batch size all the way from 1 to the GPU memory limit. Try at least a few batch sizes in between, including typical sizes like 64 and 128.**
+
+I started with the previously found best batch size - learning rate combination: (bs = 128, lr = 4e-3). Then, I experimented with the following batch sizes: {32, 64, 128, 256, 512}.
+I varied the learning rates square root to the batch size change. For example, if the batch size is doubled, I increased the learning rate by roughly √2 to enable the optimizer taking larger steps.
+I also scaled the number of training steps inverse proportionally to batch size so that the total number of seen samples are the same across different batch sizes.
+The validation losses at the final step of each setting is shown below:
+
+| Batch size | Learning rate | # steps | Final val loss |
+|---|---|---|---|
+| 32 | 2e-3 | 40K | 1.31077 |
+| 64 | 3e-3 | 20K | 1.31885 |
+| 128 | 4e-3 | 10K | 1.32856 |
+| 256 | 6e-3 | 5K | 1.33386 |
+| 512 | 8e-3 | 2.5K | 1.36060 |
+
+Based on this experiment, it seems like even though the total number of seen samples are the same, a smaller batch size with more steps attains lower validation loss.
+Note that I did not further tune the learning rates for each batch size due to resource constraints, so the conclusion might change if the learning rates are further tuned.
