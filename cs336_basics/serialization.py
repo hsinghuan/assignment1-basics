@@ -17,8 +17,9 @@ def save_checkpoint(model: torch.nn.Module,
 def load_checkpoint(src: str | os.PathLike | typing.BinaryIO | typing.IO[bytes],
                     model: torch.nn.Module,
                     optimizer: torch.optim.Optimizer,
-                    return_historical_best_val_loss: bool = False):
-    obj = torch.load(src, weights_only=False)
+                    return_historical_best_val_loss: bool = False,
+                    map_location: str | torch.device | None = None):
+    obj = torch.load(src, weights_only=False, map_location=map_location)
     model.load_state_dict(obj["model_state_dict"])
     optimizer.load_state_dict(obj["optimizer_state_dict"])
     if return_historical_best_val_loss:
