@@ -274,6 +274,8 @@ The validation losses at the final step are:
 | 8e-3 | 1.33067 |
 | 16e-3 | 2.33001 (diverged, val loss is very unstable) |
 
+![Validation loss curves for different learning rates (batch size 128)](figures/vary_lr.png)
+
 Based on the results, lr = 4e-3 seems to be the best learning rate.
 
 **(b) Folk wisdom is that the best learning rate is "at the edge of stability." Investigate how the point at which learning rates diverge is related to your best learning rate.**
@@ -296,6 +298,8 @@ The validation losses at the final step of each setting is shown below:
 | 128 | 4e-3 | 10K | 1.32856 |
 | 256 | 6e-3 | 5K | 1.33386 |
 | 512 | 8e-3 | 2.5K | 1.36060 |
+
+![Validation loss curves for different batch sizes (same total number of seen samples)](figures/vary_bs.png)
 
 Based on this experiment, it seems like even though the total number of seen samples are the same, a smaller batch size with more steps attains lower validation loss.
 Note that I did not further tune the learning rates for each batch size due to resource constraints, so the conclusion might change if the learning rates are further tuned.
