@@ -108,3 +108,27 @@ Checkpoints (`ckpt_<step>.pt` and `best.pt`) are saved under `result/<run_name>_
 Pass `--resume_from <checkpoint>` to [scripts/train.py](./scripts/train.py) to resume a run.
 Add `--use_wandb` to log metrics to Weights & Biases (requires `wandb login` or `WANDB_API_KEY`).
 
+## Generating text
+
+[scripts/generate_tinystories_mps.py](./scripts/generate_tinystories_mps.py) loads a trained
+checkpoint and samples a story on Apple Silicon (mps). Decoding uses the `generate` function
+in [cs336_basics/generate.py](./cs336_basics/generate.py), which supports temperature scaling
+and top-p (nucleus) sampling.
+
+```sh
+uv run scripts/generate_tinystories_mps.py \
+    --checkpoint_path result/<run_name>_<timestamp>/best.pt \
+    --tinystories_vocab_filepath tokenizer/tinystories_bpe_vocab.json \
+    --tinystories_merges_filepath tokenizer/tinystories_bpe_merges.json
+```
+
+- **The model config is hardcoded in the script** to match the TinyStories training config
+  (4 layers, `d_model` 512, 16 heads, `d_ff` 1344, context 256, vocab 10000, RoPE θ 10000).
+  The checkpoint stores only the weights, so update these values if you trained with a
+  different config.
+- **Generation is seeded with the `<|endoftext|>` token**, which marks the start of a new
+  story in the training data. It stops at the next `<|endoftext|>` or after 256 new tokens.
+- **Decoding settings (`temperature=0.5`, `top_p=0.9`) are set in the script.**
+- **Checkpoints saved on a CUDA machine can be loaded on a Mac**, because the script passes
+  `map_location` to `torch.load`.
+
